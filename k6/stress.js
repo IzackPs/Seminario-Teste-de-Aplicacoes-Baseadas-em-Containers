@@ -2,7 +2,7 @@ import http from 'k6/http';
 import { sleep } from 'k6';
 
 export const options = {
-  // Vamos subir os usuarios aos poucos para nao assustar o TCP
+  // Escalonamento para evitar esgotamento TCP
   stages: [
     { duration: '25s', target: 200 }, // Sobe para 200 usuarios em 25s
     { duration: '1m', target: 600 }, // Fica com 600 usuarios por 1 minuto
@@ -16,7 +16,7 @@ export default function () {
     timeout: '10s', // Da mais tempo para o servidor responder sob carga
   };
   
-  // Verifique se este IP e o do seu Debian/K3s
+  // Verifique se este IP e o do seu Debian/K3s, precisar ser o mesmo ip da aplicação rodando(app.py)
   http.get('http://192.168.10.10:30080', params); 
   
   // AUMENTAMOS O SLEEP SIGNIFICATIVAMENTE
