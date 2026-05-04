@@ -30,8 +30,10 @@ spec:
         resources:
           requests:
             cpu: "30m"
+          # memory: "64Mi" Boa pratica de limitação de memoria, mas para melhor visualização a limitação esta sendo somente CPU
           limits:
             cpu: "60m"
+          # memory: "128Mi" Boa pratica de limitação de memoria, mas para melhor visualização a limitação esta sendo somente CPU
         readinessProbe:
           httpGet:
             path: /health

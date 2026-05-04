@@ -1,39 +1,51 @@
-Repositório destinado ao seminário de testes de aplicações conteinerizadas.
+# 📦 Seminário: Teste de Aplicações Baseadas em Contêineres
 
-🛠️ Stack Tecnológica
-Linguagem: Python 3.14.4 (Flask 3.1.3)
+Repositório destinado ao seminário de Engenharia de Software II, focado em demonstrar na prática os desafios, testes e as melhores práticas (DevSecOps e Engenharia de Caos) em aplicações executadas em ambientes conteinerizados.
 
-Servidor WSGI: Gunicorn 25.3.0
+## 🛠️ Stack Tecnológica
+* **Linguagem & Framework:** Python 3.14.4 | Flask 3.1.3
+* **Servidor de Produção (WSGI):** Gunicorn 25.3.0
+* **Orquestração & Infraestrutura:** K3s (Kubernetes leve)
+* **Testes de Carga e Estresse:** Grafana k6
+* **Observabilidade:** Grafana (Dashboard 15757)
+* **Segurança (Container Scanning):** Aqua Security Trivy
 
-Orquestração: K3s (Kubernetes)
+---
 
-Testes de Carga: Grafana k6
+## 🚀 Arquitetura e Limites (Kubernetes)
+O ambiente foi rigorosamente configurado para espelhar um cenário de produção escalável e previsível:
 
-Observabilidade: Grafana + Dashboard 15757
+* **HPA (Horizontal Pod Autoscaler):** Escalonamento horizontal dinâmico de 1 a 20 réplicas, acionado ao atingir 70% de utilização de CPU.
+* **Resource Quotas:** Limites estritos para garantir estabilidade do cluster e forçar o escalonamento durante os testes:
+  * **CPU:** Requests de `30m` | Limits de `60m`
+  * **Memória:** Requests de `64Mi` | Limits de `128Mi`
+* **Probes de Saúde:**
+  * **Readiness:** Verifica a rota `/health` a cada 2s (tolerância de 3 falhas). Impede que tráfego seja enviado a Pods que ainda estão inicializando.
+  * **Liveness:** Verifica a rota `/health` a cada 5s (tolerância de 5 falhas). Responsável por reiniciar Pods travados ou mortos.
 
-Segurança: Aqua Security Trivy
+---
 
-🚀 Arquitetura e Limites
-HPA: Escalonamento horizontal (1 a 20 réplicas) baseado em 70% de uso de CPU.
+## 🌪️ Engenharia de Caos e Resiliência (Self-Healing)
+Para provar a eficácia dos testes de infraestrutura, a API possui uma rota de injeção de falhas (`/crash`). 
+Ao ser acionada, ela cria um arquivo temporário no sistema (`/tmp/api_crashed.flag`), sinalizando para todos os *workers* do Gunicorn que a aplicação entrou em estado crítico e deve retornar Erro 500 na rota `/health`. 
 
-Resources: Requests de 30m e Limits de 60m por Pod.
+**Resultado esperado e validado:** O Kubernetes detecta a falha via Liveness Probe, destrói o contêiner corrompido e provisiona um novo contêiner limpo (*Self-healing*) em menos de 30 segundos, restaurando a disponibilidade do sistema sem intervenção humana.
 
-Probes: * Readiness: Verifica /health a cada 2s (tolerância de 3 falhas).
+---
 
-Liveness: Verifica /health a cada 5s (tolerância de 5 falhas).
+## 🚦 Testes de Carga (Grafana k6)
+O script de estresse (`stress.js`) foi construído para validar o comportamento do contêiner sob alta demanda:
+* **Ramp-up e Ramp-down:** Escalonamento progressivo (até 600 VUs em 1 minuto) para evitar esgotamento abrupto de portas TCP.
+* **Validações (Checks):** Validação ativa das respostas HTTP para garantir que a aplicação não apenas suporte a conexão, mas retorne o status `200 OK` esperado.
+* **Parametrização:** Execução agnóstica de ambiente utilizando variáveis de ambiente (`BASE_URL`).
 
-📊 Principais Resultados
-Cenário Estável (600 VUs): 0% de falha, latência média de 240ms e throughput de ~249 req/s.
+---
 
-Cenário de Saturação (750 VUs): Identificação de Provisioning Lag com 2,12% de falhas de conexão recusada.
+## 🔒 Segurança e Boas Práticas (DevSecOps)
+A construção da imagem Docker adota o conceito de **Shift-Left Security** e as melhores práticas da indústria:
 
-Resiliência: Recuperação automática (Self-healing) após falha induzida via /crash em menos de 30 segundos.
-
-🔒 Segurança (DevSecOps)
-A imagem Docker foi construída seguindo o princípio do menor privilégio:
-
-Imagem de base slim (Debian 13.4).
-
-Execução via usuário api-app (non-root).
-
-Varredura de vulnerabilidades CVE via Trivy
+* **Multistage Build:** Separação estrita entre o ambiente de compilação (*Builder*) e o ambiente de execução (*Runtime*). Isso reduz drasticamente o tamanho da imagem final e elimina ferramentas de compilação da superfície de ataque.
+* **Princípio do Menor Privilégio (Non-root):** Execução do processo principal atrelada a um usuário restrito (`apiapp`), abandonando o acesso `root` padrão.
+* **Imagem Base Otimizada:** Utilização da versão `slim` do Debian 13.4.
+* **Dependências Determinísticas:** Travamento estrito das versões de bibliotecas no `requirements.txt`.
+* **Auditoria de Vulnerabilidades:** Varredura de CVEs (Common Vulnerabilities and Exposures) garantida pelo uso contínuo do **Trivy** na imagem final.
