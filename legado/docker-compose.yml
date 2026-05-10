@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  api-seminario:
+    image: api-seminario:v2
+    # 1. Equivalente ao Service (NodePort)
+    ports:
+      - "30080:8080" 
+      
+    # 2. Equivalente ao Liveness/Readiness Probes (O Compose unifica os dois)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 5s       # periodSeconds
+      timeout: 5s        # timeoutSeconds
+      retries: 5         # failureThreshold
+      start_period: 3s   # initialDelaySeconds
+
+    # 3. Equivalente ao Deployment e Resources
+    deploy:
+      mode: replicated
+      replicas: 1        # O Compose é estático, NÃO FAZ Auto-Scaling (HPA) sozinho!
+      resources:
+        reservations:
+          cpus: '0.03'   # Equivalente ao requests cpu: "30m"
+        limits:
+          cpus: '0.06'   # Equivalente ao limits cpu: "60m"
