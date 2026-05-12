@@ -2,7 +2,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-seminario
+  labels:
+    app: api-seminario
+    contexto: seminario-sre
 spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25% 
   replicas: 1
   selector:
     matchLabels:
@@ -12,13 +20,27 @@ spec:
       labels:
         app: api-seminario
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000   # Define explicitamente um usuário não-privilegiado
+      
       containers:
       - name: api
         image: api-seminario:v2
         imagePullPolicy: Never
         ports:
         - containerPort: 8080
+
         # TESTE DE CRASH (RESILIENCIA)
+        # DevSecOps: Blindagem (Hardening) do tempo de execução
+        securityContext:
+          readOnlyRootFilesystem: true  # Impede escrita no sistema de arquivos do container (anti-malware)
+          allowPrivilegeEscalation: false # Garante que o processo filho não ganhe mais privilégios que o pai
+          capabilities:
+            drop: ["ALL"] # Remove todas as permissões do Linux não essenciais (Princípio do Menor Privilégio)
+
+        # SRE: Liveness Probe - "O processo está travado?" 
+        # Se falhar 5 vezes, o K8s reinicia o container automaticamente (Self-healing).
         livenessProbe:
           httpGet:
             path: /health
@@ -27,13 +49,9 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 5
           failureThreshold: 5
-        resources:
-          requests:
-            cpu: "30m"
-          # memory: "64Mi" Boa pratica de limitação de memoria, mas para melhor visualização a limitação esta sendo somente CPU
-          limits:
-            cpu: "60m"
-          # memory: "128Mi" Boa pratica de limitação de memoria, mas para melhor visualização a limitação esta sendo somente CPU
+
+        # SRE: Readiness Probe - "A aplicação pode receber tráfego?"
+        # Se falhar, o Pod é removido do balanceamento do Service, mas não é reiniciado.
         readinessProbe:
           httpGet:
             path: /health
@@ -43,6 +61,22 @@ spec:
           timeoutSeconds: 2
           successThreshold: 1
           failureThreshold: 3
+
+        resources:
+          requests:
+            cpu: "30m"      
+          # memory: "64Mi"  # Não usando propositalmente, mas pode ser ajustado conforme a necessidade da aplicação.
+          limits:
+            cpu: "60m"      
+          # memory: "128Mi" # Não usando propositalmente, mas pode ser ajustado conforme a necessidade da aplicação. para evitar OOMKills, é recomendado definir limites de memória.
+
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-volume
+
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -75,4 +109,4 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 70
+        averageUtilization: 70 # Escala horizontalmente quando a CPU média exceder 70%

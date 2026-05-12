@@ -20,29 +20,24 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 
 # ==============================================================================
-# ESTÁGIO 2: RUNTIME (A imagem final, limpa, leve e segura)
+# ESTÁGIO 2: RUNTIME
 # ==============================================================================
 FROM python:3.14.4-slim
 
-# Segurança DevSecOps: Usuário sem privilégios
-RUN adduser --disabled-password --gecos '' apiapp
+RUN addgroup --system --gid 10001 apiappgroup && \
+    adduser --system --uid 10001 --gid 10001 --no-create-home apiapp
 
 WORKDIR /app
-RUN chown apiapp:apiapp /app
+RUN chown 10001:10001 /app
 
-# Mudamos para o usuário seguro
-USER apiapp
+# Mudamos para o UID seguro numérico (O Kubernetes prefere UIDs para validar runAsNonRoot)
+USER 10001
 
-# A MÁGICA: Copiamos apenas o ambiente virtual pronto do estágio builder
-COPY --from=builder --chown=apiapp:apiapp /app/venv /app/venv
-
-# Garantimos que o sistema use o nosso venv
+# A MÁGICA: Copiamos apenas o ambiente virtual pronto
+COPY --from=builder --chown=10001:10001 /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
-# Agora copiamos APENAS o código da aplicação
-COPY --chown=apiapp:apiapp app.py /app/
+COPY --chown=10001:10001 app.py /app/
 
 EXPOSE 8080
-
-# Servidor de Produção (Gunicorn)
 CMD ["gunicorn", "-w", "1", "--threads", "2", "-b", "0.0.0.0:8080", "app:app"]
