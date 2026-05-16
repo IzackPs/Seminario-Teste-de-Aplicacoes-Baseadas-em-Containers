@@ -20,27 +20,46 @@ spec:
       labels:
         app: api-seminario
     spec:
+      # Configurações de segurança em nível de Pod (aplica-se a todos os contêineres)
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000   # Define explicitamente um usuário não-privilegiado
-      
+        runAsNonRoot: true # Impede a execução como usuário root (boas práticas de segurança)
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault # Utiliza o perfil padrão do runtime para bloquear syscalls perigosas
+
       containers:
       - name: api
         image: api-seminario:v2
         imagePullPolicy: Never
+        env:
+        - name: HOME
+          value: "/tmp"
         ports:
         - containerPort: 8080
 
-        # TESTE DE CRASH (RESILIENCIA)
-        # DevSecOps: Blindagem (Hardening) do tempo de execução
-        securityContext:
-          readOnlyRootFilesystem: true  # Impede escrita no sistema de arquivos do container (anti-malware)
-          allowPrivilegeEscalation: false # Garante que o processo filho não ganhe mais privilégios que o pai
-          capabilities:
-            drop: ["ALL"] # Remove todas as permissões do Linux não essenciais (Princípio do Menor Privilégio)
+        lifecycle:
+          postStart:
+            exec:
+              command: ["/bin/sh", "-c", "rm -f /tmp/api_crashed.flag"]
 
-        # SRE: Liveness Probe - "O processo está travado?" 
-        # Se falhar 5 vezes, o K8s reinicia o container automaticamente (Self-healing).
+        securityContext:
+          readOnlyRootFilesystem: true  # Torna o sistema de arquivos raiz imutável para evitar adulterações
+          allowPrivilegeEscalation: false # Previne que processos filhos escalem privilégios (ex: via setuid)
+          capabilities:
+            drop: ["ALL"] # Aplica o Princípio do Menor Privilégio removendo todas as capabilities do Kernel do Linux
+
+        # Readiness Probe: O Pod está pronto para receber tráfego?
+        # Em caso de 3 falhas consecutivas (6s totais), o Pod é removido do Service/LoadBalancer.
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 1
+          periodSeconds: 2
+          failureThreshold: 3
+
+        # Liveness Probe: A aplicação está travada ou em deadlock?
+        # Em caso de 5 falhas consecutivas (25s totais), o Kubelet reiniciará o contêiner (Self-Healing).
         livenessProbe:
           httpGet:
             path: /health
@@ -50,33 +69,22 @@ spec:
           timeoutSeconds: 5
           failureThreshold: 5
 
-        # SRE: Readiness Probe - "A aplicação pode receber tráfego?"
-        # Se falhar, o Pod é removido do balanceamento do Service, mas não é reiniciado.
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 1
-          periodSeconds: 2
-          timeoutSeconds: 2
-          successThreshold: 1
-          failureThreshold: 3
-
         resources:
           requests:
-            cpu: "30m"      
-          # memory: "64Mi"  # Não usando propositalmente, mas pode ser ajustado conforme a necessidade da aplicação.
+            cpu: "30m"      # minimo cpu
           limits:
-            cpu: "60m"      
-          # memory: "128Mi" # Não usando propositalmente, mas pode ser ajustado conforme a necessidade da aplicação. para evitar OOMKills, é recomendado definir limites de memória.
+            cpu: "60m"      # limite cpu
+          # Limites de memória foram omitidos intencionalmente para teste de carga pesada do K6
 
+        # Mapeamento do volume temporário para dentro do contêiner
         volumeMounts:
         - mountPath: /tmp
           name: tmp-volume
 
+      # Declaração dos volumes utilizados pelos contêineres do Pod
       volumes:
       - name: tmp-volume
-        emptyDir: {}
+        emptyDir: {} # Volume efêmero criado no disco do nó (os dados são perdidos se o Pod for destruído)
 ---
 apiVersion: v1
 kind: Service
@@ -91,7 +99,7 @@ spec:
       targetPort: 8080
       nodePort: 30080
 ---
-# TESTE DE CARGA (ESCALABILIDADE)
+# Configuração do Horizontal Pod Autoscaler (HPA) para elasticidade
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -109,4 +117,4 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 70 # Escala horizontalmente quando a CPU média exceder 70%
+        averageUtilization: 70 # Adiciona réplicas quando a média de uso de CPU ultrapassar 70%

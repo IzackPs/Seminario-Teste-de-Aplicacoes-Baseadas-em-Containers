@@ -18,7 +18,7 @@ O ambiente foi rigorosamente configurado para espelhar um cenário de produção
 * **HPA (Horizontal Pod Autoscaler):** Escalonamento horizontal dinâmico de 1 a 20 réplicas, acionado ao atingir 70% de utilização de CPU.
 * **Resource Quotas:** Limites estritos para garantir estabilidade do cluster e forçar o escalonamento durante os testes:
   * **CPU:** Requests de `30m` | Limits de `60m`
-  * **Memória:** Requests de `64Mi` | Limits de `128Mi`
+  * **Memória:** Limites omitidos intencionalmente para suportar o buffer TCP da alta carga do K6, focando o gargalo estritamente na CPU.
 * **Probes de Saúde:**
   * **Readiness:** Verifica a rota `/health` a cada 2s (tolerância de 3 falhas). Impede que tráfego seja enviado a Pods que ainda estão inicializando.
   * **Liveness:** Verifica a rota `/health` a cada 5s (tolerância de 5 falhas). Responsável por reiniciar Pods travados ou mortos.
