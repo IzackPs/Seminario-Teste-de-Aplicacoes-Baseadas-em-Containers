@@ -56,6 +56,8 @@ spec:
             port: 8080
           initialDelaySeconds: 1
           periodSeconds: 2
+          timeoutSeconds: 2
+          successThreshold: 1
           failureThreshold: 3
 
         # Liveness Probe: A aplicação está travada ou em deadlock?
@@ -72,9 +74,10 @@ spec:
         resources:
           requests:
             cpu: "30m"      # minimo cpu
+            # memory: "64Mi" Boa pratica de limitação de memoria, mas para melhor visualização a limitação esta sendo somente CPU
           limits:
             cpu: "60m"      # limite cpu
-          # Limites de memória foram omitidos intencionalmente para teste de carga pesada do K6
+            # memory: "128Mi" Boa pratica de limitação de memoria, mas para melhor visualização a limitação esta sendo somente CPU
 
         # Mapeamento do volume temporário para dentro do contêiner
         volumeMounts:
